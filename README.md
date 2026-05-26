@@ -26,7 +26,7 @@ pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124
 ### 安装其他依赖
 
 ```bash
-pip install modelscope diffusers transformers accelerate bitsandbytes sentencepiece Pillow
+pip install modelscope diffusers transformers accelerate bitsandbytes sentencepiece Pillow peft atomgit
 ```
 
 ## 模型下载
@@ -40,14 +40,6 @@ modelscope download --model Qwen/Qwen-Image-Edit-2511 --local_dir ./models/Qwen-
 模型约 57.7GB（BF16），下载耗时较长，请确保磁盘空间充足。
 
 ### 主模型（4-bit 量化版）
-
-需先安装 atomgit：
-
-```bash
-pip install atomgit
-```
-
-下载模型：
 
 ```bash
 atomgit download hf_mirrors/toandev/Qwen-Image-Edit-2511-4bit -d ./models/Qwen-Image-Edit-2511-4bit

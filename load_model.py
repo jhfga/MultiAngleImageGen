@@ -44,7 +44,6 @@ def run_inference(
     num_inference_steps: int,
     guidance_scale: float,
     max_image_size: int,
-    lora_scale: float = 1.0,
 ) -> Image.Image:
     """
     使用 Qwen-Image-Edit-2511 执行图像编辑推理。
@@ -58,7 +57,6 @@ def run_inference(
         num_inference_steps: 推理步数（使用 Lightning LoRA 时可设为 4，标准推理通常 30-50）
         guidance_scale: 引导系数，越高越贴合指令，通常 3.0-7.0
         max_image_size: 输入图像最大边长，超出会等比缩放；显存越大可设越大
-        lora_scale: LoRA 强度，1.0 为满强度，0.0 等于不启用 LoRA
 
     Returns:
         生成的 PIL Image 对象
@@ -128,5 +126,4 @@ if __name__ == "__main__":
             num_inference_steps=20,
             guidance_scale=5.0,
             max_image_size=1024,
-            lora_scale=1.0,
         )
