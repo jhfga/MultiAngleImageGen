@@ -23,7 +23,7 @@ class Task:
     status: str = "waiting"       # waiting / processing / completed / failed
     queue_position: int = 0       # 排队位置，0 表示正在处理
     created_at: float = field(default_factory=time.time)
-    input_images = None           # 预处理后的 PIL Image
+    input_images: object = None          # 预处理后的 PIL Image
     prompt: str = ""
     seed: int = 42
     num_inference_steps: int = 20
@@ -182,9 +182,8 @@ async def generate(
     if pipe is None:
         raise HTTPException(status_code=503, detail="模型尚未加载完成，请稍后重试")
 
-    # ── 并行：读取上传文件字节 ────────────────────────────
-    read_tasks = [asyncio.to_thread(f.read) for f in images]
-    file_bytes_list = await asyncio.gather(*read_tasks)
+    # ── 并行：读取上传文件字节（UploadFile.read 是异步方法） ──
+    file_bytes_list = await asyncio.gather(*[f.read() for f in images])
 
     # ── 并行：图片预处理（加载+缩放） ─────────────────────
     preprocess_tasks = [

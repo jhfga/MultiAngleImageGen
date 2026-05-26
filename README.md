@@ -92,6 +92,16 @@ python server.py
 1. 安装 cloudflared：
 
 ```bash
+# Ubuntu/Debian（推荐，速度快）
+sudo mkdir -p /etc/apt/keyrings
+curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | sudo tee /etc/apt/keyrings/cloudflare-main.gpg >/dev/null
+echo "deb [signed-by=/etc/apt/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflared.list
+sudo apt update && sudo apt install cloudflared -y
+
+# CentOS/RHEL
+sudo yum install cloudflared -y
+
+# Windows
 winget install Cloudflare.cloudflared
 ```
 

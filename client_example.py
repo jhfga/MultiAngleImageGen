@@ -3,7 +3,7 @@
 import time
 import requests
 
-SERVER_URL = "http://localhost:8000"  # 替换为你的公网地址，如 https://xxxx.trycloudflare.com
+SERVER_URL = "https://fed-steel-ahead-resulted.trycloudflare.com"  # 替换为你的公网地址，如 https://xxxx.trycloudflare.com
 POLL_INTERVAL = 2  # 轮询间隔（秒）
 
 
