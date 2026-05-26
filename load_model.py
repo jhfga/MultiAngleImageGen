@@ -22,8 +22,8 @@ def load_model_4bit(
         torch_dtype=torch.bfloat16,
     )
 
-    # 启用 CPU 卸载，GPU < 40GB 显存时必须开启
-    pipe.enable_model_cpu_offload()
+    # 模型全部加载到 GPU（显存足够时性能更好）
+    pipe.to("cuda")
 
     # 启用推理进度条
     pipe.set_progress_bar_config(disable=None)
@@ -72,22 +72,35 @@ def run_inference(
         w, h = input_images.size
         if max(w, h) > max_image_size:
             ratio = max_image_size / max(w, h)
-            input_images = input_images.resize((int(w * ratio), int(h * ratio)))
+            w, h = int(w * ratio), int(h * ratio)
+            input_images = input_images.resize((w, h))
     else:
         resized = []
         for img in input_images:
             w, h = img.size
             if max(w, h) > max_image_size:
                 ratio = max_image_size / max(w, h)
-                img = img.resize((int(w * ratio), int(h * ratio)))
+                w, h = int(w * ratio), int(h * ratio)
+                img = img.resize((w, h))
             resized.append(img)
         input_images = resized
+
+    # 获取最终输入图像尺寸，并指定为输出尺寸（对齐到 vae_scale_factor*2 的倍数）
+    if isinstance(input_images, list):
+        final_w, final_h = input_images[0].size
+    else:
+        final_w, final_h = input_images.size
+    required_div = pipe.vae_scale_factor * 2
+    final_w = round(final_w / required_div) * required_div
+    final_h = round(final_h / required_div) * required_div
 
     generator = torch.Generator(device="cpu").manual_seed(seed)
 
     inputs = {
         "prompt": prompt,
         "image": input_images,
+        "width": final_w,
+        "height": final_h,
         "num_inference_steps": num_inference_steps,
         "guidance_scale": guidance_scale,
         "true_cfg_scale": 4.0,

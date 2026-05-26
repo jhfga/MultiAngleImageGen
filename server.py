@@ -139,6 +139,15 @@ def _run_inference(
     """执行模型推理，返回生成的 PIL Image。"""
     generator = torch.Generator(device="cpu").manual_seed(seed)
 
+    # 获取最终输入图像尺寸，并指定为输出尺寸（对齐到 vae_scale_factor*2 的倍数）
+    if isinstance(input_images, list):
+        final_w, final_h = input_images[0].size
+    else:
+        final_w, final_h = input_images.size
+    required_div = pipe.vae_scale_factor * 2
+    final_w = round(final_w / required_div) * required_div
+    final_h = round(final_h / required_div) * required_div
+
     def _on_step_end(pipe, step, timestep, callback_kwargs):
         """每步推理结束后更新任务进度。"""
         task.current_step = step + 1
@@ -148,6 +157,8 @@ def _run_inference(
     inputs = {
         "prompt": prompt,
         "image": input_images,
+        "width": final_w,
+        "height": final_h,
         "num_inference_steps": num_inference_steps,
         "guidance_scale": guidance_scale,
         "true_cfg_scale": 4.0,
