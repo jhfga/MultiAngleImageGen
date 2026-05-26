@@ -50,3 +50,110 @@ atomgit download hf_mirrors/toandev/Qwen-Image-Edit-2511-4bit -d ./models/Qwen-I
 ```bash
 modelscope download --model fal/Qwen-Image-Edit-2511-Multiple-Angles-LoRA --local_dir ./models/Qwen-Image-Edit-2511-Multiple-Angles-LoRA
 ```
+
+## 使用方式
+
+### 方式一：命令行推理
+
+直接运行 `load_model.py`，对 `test.png` 生成 4 种角度的图片：
+
+```bash
+python load_model.py
+```
+
+可在代码中修改 `prompts` 列表和 `image_path` 来自定义输入。
+
+### 方式二：启动推理服务
+
+启动 HTTP 服务，用户通过接口上传图片和提示词即可获得生成结果。
+
+#### 安装服务依赖
+
+```bash
+pip install fastapi "uvicorn[standard]"
+```
+
+#### 仅局域网访问
+
+```bash
+python server.py
+```
+
+服务监听 `http://0.0.0.0:8000`。
+
+#### 公网访问（Cloudflare Quick Tunnel）
+
+1. 安装 cloudflared：
+
+```bash
+winget install Cloudflare.cloudflared
+```
+
+2. 启动服务并自动开通公网隧道：
+
+```bash
+python server.py --tunnel
+```
+
+启动后会自动打印公网地址，如：
+
+```
+============================================================
+  公网访问地址: https://xxxx-xxxx.trycloudflare.com
+  API 文档:     https://xxxx-xxxx.trycloudflare.com/docs
+============================================================
+```
+
+#### 服务启动参数
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `--host` | `0.0.0.0` | 监听地址 |
+| `--port` | `8000` | 监听端口 |
+| `--tunnel` | 关闭 | 启用 Cloudflare Quick Tunnel 公网访问 |
+
+#### API 接口
+
+**健康检查**
+
+```
+GET /health
+```
+
+**图像生成**
+
+```
+POST /generate
+Content-Type: multipart/form-data
+```
+
+| 字段 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| `images` | File[] | 是 | - | 输入图片（支持多张） |
+| `prompt` | string | 是 | - | 编辑提示词 |
+| `seed` | int | 否 | 42 | 随机种子 |
+| `num_inference_steps` | int | 否 | 20 | 推理步数 |
+| `guidance_scale` | float | 否 | 5.0 | 引导系数 |
+| `max_image_size` | int | 否 | 1024 | 最大图像边长 |
+
+返回 `image/png` 图片字节流。
+
+#### 调用示例
+
+**curl**
+
+```bash
+curl -X POST http://localhost:8000/generate \
+  -F "images=@test.png" \
+  -F "prompt=<sks> front view eye-level shot medium shot" \
+  -o output.png
+```
+
+**Python**
+
+```bash
+pip install requests
+python client_example.py
+```
+
+详见 `client_example.py`，包含单图推理、多图推理、健康检查的完整示例。
