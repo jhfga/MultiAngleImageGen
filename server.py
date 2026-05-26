@@ -22,6 +22,9 @@ class Task:
     id: str
     status: str = "waiting"       # waiting / processing / completed / failed
     queue_position: int = 0       # 排队位置，0 表示正在处理
+    progress: float = 0.0         # 推理进度 0.0 ~ 1.0
+    current_step: int = 0         # 当前推理步数
+    total_steps: int = 0          # 总推理步数
     created_at: float = field(default_factory=time.time)
     input_images: object = None          # 预处理后的 PIL Image
     prompt: str = ""
@@ -55,6 +58,7 @@ class TaskManager:
 
             task.status = "processing"
             task.queue_position = 0
+            task.total_steps = task.num_inference_steps
 
             try:
                 output_image = await asyncio.to_thread(
@@ -64,7 +68,10 @@ class TaskManager:
                     task.seed,
                     task.num_inference_steps,
                     task.guidance_scale,
+                    task,
                 )
+                task.progress = 1.0
+                task.current_step = task.total_steps
                 task.result = await asyncio.to_thread(_image_to_png_bytes, output_image)
                 task.status = "completed"
             except Exception as e:
@@ -127,9 +134,16 @@ def _run_inference(
     seed: int,
     num_inference_steps: int,
     guidance_scale: float,
+    task: Task,
 ) -> Image.Image:
     """执行模型推理，返回生成的 PIL Image。"""
     generator = torch.Generator(device="cpu").manual_seed(seed)
+
+    def _on_step_end(pipe, step, timestep, callback_kwargs):
+        """每步推理结束后更新任务进度。"""
+        task.current_step = step + 1
+        task.progress = round((step + 1) / num_inference_steps, 4)
+        return callback_kwargs
 
     inputs = {
         "prompt": prompt,
@@ -140,6 +154,8 @@ def _run_inference(
         "negative_prompt": " ",
         "num_images_per_prompt": 1,
         "generator": generator,
+        "callback_on_step_end": _on_step_end,
+        "callback_on_step_end_tensor_inputs": [],
     }
 
     with torch.inference_mode():
@@ -222,6 +238,10 @@ async def get_status(task_id: str):
     }
     if task.status == "waiting":
         resp["queue_position"] = task.queue_position
+    if task.status == "processing":
+        resp["progress"] = task.progress
+        resp["current_step"] = task.current_step
+        resp["total_steps"] = task.total_steps
     if task.status == "failed":
         resp["error"] = task.error
     return resp

@@ -68,7 +68,10 @@ def wait_and_download(task_id: str, output_path: str = "output.png"):
         if data["status"] == "waiting":
             print(f"\r排队中... 前方还有 {data['queue_position']} 人", end="", flush=True)
         elif data["status"] == "processing":
-            print("\r正在生成中...", end="", flush=True)
+            step = data.get("current_step", 0)
+            total = data.get("total_steps", 0)
+            pct = data.get("progress", 0) * 100
+            print(f"\r正在生成中... {step}/{total} ({pct:.1f}%)", end="", flush=True)
         elif data["status"] == "completed":
             print("\n生成完成，正在下载...")
             break
