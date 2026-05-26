@@ -28,7 +28,7 @@ def load_model_4bit(
     # 启用推理进度条
     pipe.set_progress_bar_config(disable=None)
 
-    # 加载 LoRA（不 fuse，推理时通过 lora_scale 动态控制强度）
+    # 加载 LoRA
     if lora_path is not None:
         pipe.load_lora_weights(lora_path)
 
@@ -96,7 +96,6 @@ def run_inference(
         "negative_prompt": " ",
         "num_images_per_prompt": 1,
         "generator": generator,
-        "cross_attention_kwargs": {"scale": lora_scale},
     }
 
     with torch.inference_mode():
