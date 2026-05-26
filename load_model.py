@@ -1,46 +1,32 @@
+import os
 import torch
 from PIL import Image
-from diffusers import QwenImageEditPlusPipeline, BitsAndBytesConfig
+from diffusers import QwenImageEditPlusPipeline
 
 
-def load_model_nf4(
-    model_path: str = "./models/Qwen-Image-Edit-2511",
+def load_model_4bit(
+    model_path: str = "./models/Qwen-Image-Edit-2511-4bit",
     lora_path: str | None = "./models/Qwen-Image-Edit-2511-Multiple-Angles-LoRA",
 ):
     """
-    以 NF4 量化 + CPU 卸载方式加载 Qwen-Image-Edit-2511 模型。
+    加载预量化 4-bit 版本的 Qwen-Image-Edit-2511 模型。
     Args:
-        model_path: 本地模型路径
+        model_path: 本地 4-bit 模型路径
         lora_path: LoRA 权重路径
 
     Returns:
         QwenImageEditPlusPipeline 实例
     """
-    # 仅量化 Transformer 为 NF4，Text Encoder 和 VAE 保持 BF16
-    nf4_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_compute_dtype=torch.bfloat16,
-        bnb_4bit_quant_storage=torch.bfloat16,
-    )
-
     pipe = QwenImageEditPlusPipeline.from_pretrained(
         model_path,
-        transformer_4bit_quantization_config=nf4_config,
         torch_dtype=torch.bfloat16,
     )
 
-    # 根据CUDA可用性选择设备
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    if device == "cpu":
-        print("警告：未检测到CUDA，将使用CPU运行，速度会非常慢")
-    pipe.to(device)
+    # 启用 CPU 卸载，GPU < 40GB 显存时必须开启
+    pipe.enable_model_cpu_offload()
 
     # 启用推理进度条
     pipe.set_progress_bar_config(disable=None)
-
-    # 启用内存优化，减少显存占用
-    pipe.enable_model_cpu_offload()
 
     # 加载 LoRA（不 fuse，推理时通过 lora_scale 动态控制强度）
     if lora_path is not None:
@@ -101,14 +87,20 @@ def run_inference(
 
     generator = torch.Generator(device="cpu").manual_seed(seed)
 
-    result = pipe(
-        prompt=prompt,
-        image=input_images,
-        num_inference_steps=num_inference_steps,
-        guidance_scale=guidance_scale,
-        generator=generator,
-        cross_attention_kwargs={"scale": lora_scale},
-    )
+    inputs = {
+        "prompt": prompt,
+        "image": input_images,
+        "num_inference_steps": num_inference_steps,
+        "guidance_scale": guidance_scale,
+        "true_cfg_scale": 4.0,
+        "negative_prompt": " ",
+        "num_images_per_prompt": 1,
+        "generator": generator,
+        "cross_attention_kwargs": {"scale": lora_scale},
+    }
+
+    with torch.inference_mode():
+        result = pipe(**inputs)
 
     output_image = result.images[0]
     output_image.save(output_path)
@@ -117,7 +109,7 @@ def run_inference(
 
 
 if __name__ == "__main__":
-    pipe = load_model_nf4()
+    pipe = load_model_4bit()
 
     prompts = [
         "<sks> front view eye-level shot medium shot",
