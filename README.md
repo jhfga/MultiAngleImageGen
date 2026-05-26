@@ -41,8 +41,16 @@ modelscope download --model Qwen/Qwen-Image-Edit-2511 --local_dir ./models/Qwen-
 
 ### 主模型（4-bit 量化版）
 
+需先安装 atomgit：
+
 ```bash
-atomgit download hf_mirrors/toandev/Qwen-Image-Edit-2511-4bit -d ./models
+pip install atomgit
+```
+
+下载模型：
+
+```bash
+atomgit download hf_mirrors/toandev/Qwen-Image-Edit-2511-4bit -d ./models/Qwen-Image-Edit-2511-4bit
 ```
 
 ### LoRA
@@ -50,13 +58,3 @@ atomgit download hf_mirrors/toandev/Qwen-Image-Edit-2511-4bit -d ./models
 ```bash
 modelscope download --model fal/Qwen-Image-Edit-2511-Multiple-Angles-LoRA --local_dir ./models/Qwen-Image-Edit-2511-Multiple-Angles-LoRA
 ```
-
-## 硬件要求
-
-| 配置 | 显存需求 | 说明 |
-|------|---------|------|
-| BF16 原版 | ~30GB | 全精度加载 |
-| FP8 量化 | ~15GB | 量化加载 |
-| NF4 量化 + CPU卸载 | ~12GB | 4-bit量化，Text Encoder卸载CPU |
-
-推荐 12GB 显存使用 NF4 量化 + CPU 卸载方案。
