@@ -20,7 +20,7 @@ conda install -c nvidia cuda-toolkit=12.4 -y
 ### 安装 PyTorch（GPU 版）
 
 ```bash
-pip install torch torchvision --index-url https://mirrors.aliyun.com/pytorch-wheels/cu124
+pip install torch torchvision -i https://pypi.tuna.tsinghua.edu.cn/simple --extra-index-url https://download.pytorch.org/whl/cu124
 ```
 
 ### 安装其他依赖

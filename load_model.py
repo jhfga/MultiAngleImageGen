@@ -9,14 +9,9 @@ def load_model_nf4(
 ):
     """
     以 NF4 量化 + CPU 卸载方式加载 Qwen-Image-Edit-2511 模型。
-
-    仅对 Transformer 做 4-bit NF4 量化（约占 10-11GB 显存），
-    Text Encoder 和 VAE 保持 BF16 并通过 enable_model_cpu_offload
-    在推理时自动搬运，适合 12GB 显存的 GPU。
-
     Args:
         model_path: 本地模型路径
-        lora_path: LoRA 权重路径，为 None 则不加载
+        lora_path: LoRA 权重路径
 
     Returns:
         DiffusionPipeline 实例
@@ -110,3 +105,28 @@ def run_inference(
     output_image.save(output_path)
     print(f"图片已保存至 {output_path}")
     return output_image
+
+
+if __name__ == "__main__":
+    pipe = load_model_nf4()
+
+    prompts = [
+        "<sks> front view eye-level shot medium shot",
+        "<sks> right side view high-angle shot close-up",
+        "<sks> back view low-angle shot wide shot",
+        "<sks> front-left quarter view elevated shot medium shot",
+    ]
+
+    for i, prompt in enumerate(prompts):
+        output_path = f"./output_{i + 1}.png"
+        run_inference(
+            pipe=pipe,
+            image_path="./test.png",
+            prompt=prompt,
+            output_path=output_path,
+            seed=42,
+            num_inference_steps=20,
+            guidance_scale=5.0,
+            max_image_size=1024,
+            lora_scale=1.0,
+        )
