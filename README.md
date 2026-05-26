@@ -31,13 +31,19 @@ pip install modelscope diffusers transformers accelerate bitsandbytes sentencepi
 
 ## 模型下载
 
-### 主模型
+### 主模型（BF16 原版）
 
 ```bash
 modelscope download --model Qwen/Qwen-Image-Edit-2511 --local_dir ./models/Qwen-Image-Edit-2511
 ```
 
 模型约 57.7GB（BF16），下载耗时较长，请确保磁盘空间充足。
+
+### 主模型（4-bit 量化版）
+
+```bash
+atomgit download hf_mirrors/toandev/Qwen-Image-Edit-2511-4bit -d ./models
+```
 
 ### LoRA
 
