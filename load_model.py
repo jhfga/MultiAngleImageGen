@@ -30,8 +30,11 @@ def load_model_nf4(
         torch_dtype=torch.bfloat16,
     )
 
-    # CPU 卸载：Text Encoder / VAE 平时驻留 CPU，推理时按需搬运到 GPU
-    pipe.enable_model_cpu_offload()
+    # 根据CUDA可用性选择设备
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    if device == "cpu":
+        print("警告：未检测到CUDA，将使用CPU运行，速度会非常慢")
+    pipe.to(device)
 
     # 加载 LoRA（不 fuse，推理时通过 lora_scale 动态控制强度）
     if lora_path is not None:
