@@ -1,6 +1,6 @@
 import torch
 from PIL import Image
-from diffusers import DiffusionPipeline, BitsAndBytesConfig
+from diffusers import QwenImageEditPlusPipeline, BitsAndBytesConfig
 
 
 def load_model_nf4(
@@ -14,7 +14,7 @@ def load_model_nf4(
         lora_path: LoRA 权重路径
 
     Returns:
-        DiffusionPipeline 实例
+        QwenImageEditPlusPipeline 实例
     """
     # 仅量化 Transformer 为 NF4，Text Encoder 和 VAE 保持 BF16
     nf4_config = BitsAndBytesConfig(
@@ -24,7 +24,7 @@ def load_model_nf4(
         bnb_4bit_quant_storage=torch.bfloat16,
     )
 
-    pipe = DiffusionPipeline.from_pretrained(
+    pipe = QwenImageEditPlusPipeline.from_pretrained(
         model_path,
         transformer_4bit_quantization_config=nf4_config,
         torch_dtype=torch.bfloat16,
@@ -36,6 +36,12 @@ def load_model_nf4(
         print("警告：未检测到CUDA，将使用CPU运行，速度会非常慢")
     pipe.to(device)
 
+    # 启用推理进度条
+    pipe.set_progress_bar_config(disable=None)
+
+    # 启用内存优化，减少显存占用
+    pipe.enable_model_cpu_offload()
+
     # 加载 LoRA（不 fuse，推理时通过 lora_scale 动态控制强度）
     if lora_path is not None:
         pipe.load_lora_weights(lora_path)
@@ -44,7 +50,7 @@ def load_model_nf4(
 
 
 def run_inference(
-    pipe: DiffusionPipeline,
+    pipe: QwenImageEditPlusPipeline,
     image_path: str | list[str],
     prompt: str,
     output_path: str,
