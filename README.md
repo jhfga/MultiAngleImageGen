@@ -45,6 +45,12 @@ modelscope download --model Qwen/Qwen-Image-Edit-2511 --local_dir ./models/Qwen-
 atomgit download hf_mirrors/toandev/Qwen-Image-Edit-2511-4bit -d ./models/Qwen-Image-Edit-2511-4bit
 ```
 
+### 主模型（FP8 量化版）
+
+```bash
+modelscope download --model 1038lab/Qwen-Image-Edit-2511-FP8 --local_dir ./models/Qwen-Image-Edit-2511-FP8
+```
+
 ### LoRA
 
 ```bash
