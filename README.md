@@ -4,8 +4,29 @@
 
 ## 环境准备
 
+### 创建 Conda 环境
+
 ```bash
-pip install modelscope
+conda create -n multiangle python=3.12 -y
+conda activate multiangle
+```
+
+### 安装 CUDA Toolkit
+
+```bash
+conda install -c nvidia cuda-toolkit=12.4 -y
+```
+
+### 安装 PyTorch（GPU 版）
+
+```bash
+pip install torch torchvision --index-url https://mirrors.aliyun.com/pytorch-wheels/cu124
+```
+
+### 安装其他依赖
+
+```bash
+pip install modelscope diffusers transformers accelerate bitsandbytes sentencepiece Pillow
 ```
 
 ## 模型下载
