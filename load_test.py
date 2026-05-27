@@ -114,10 +114,7 @@ async def simulate_user(
         # 提交任务
         data = aiohttp.FormData()
         data.add_field("images", test_image_bytes, filename="test.png", content_type="image/png")
-        data.add_field("prompt", "<sks> front view eye-level shot medium shot")
-        data.add_field("seed", str(random.randint(0, 999999)))
-        data.add_field("num_inference_steps", "20")
-        data.add_field("guidance_scale", "5.0")
+        data.add_field("prompt", "<sks> back view low-angle shot wide shot")
 
         async with session.post(
             f"{base_url}/generate",
@@ -279,7 +276,7 @@ async def run_load_test(
 
 def main():
     parser = argparse.ArgumentParser(description="多用户随机到达负载测试")
-    parser.add_argument("--url", required=True, help="服务地址，如 http://203.0.113.10:8000")
+    parser.add_argument("--url", default="http://127.0.0.1:8000", help="服务地址（SSH 端口转发后默认 http://127.0.0.1:8000）")
     parser.add_argument("--key", required=True, help="访问密钥")
     parser.add_argument("--duration", type=int, default=600, help="测试时长（秒），默认 600（10 分钟）")
     parser.add_argument("--traffic", type=float, default=6.0, help="流量：每分钟平均到达用户数，默认 6")

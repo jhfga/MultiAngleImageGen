@@ -12,7 +12,7 @@ from PIL import Image
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, Query
 from fastapi.responses import Response
 
-from load_model import load_model_4bit
+from load_model_lightning_lora import load_model_lightning_lora
 
 # ── 任务状态 ─────────────────────────────────────────────
 @dataclass
@@ -26,9 +26,9 @@ class Task:
     created_at: float = field(default_factory=time.time)
     input_images: object = None          # 预处理后的 PIL Image
     prompt: str = ""
-    seed: int = 42
-    num_inference_steps: int = 20
-    guidance_scale: float = 5.0
+    seed: int = -1              # -1 表示随机种子
+    num_inference_steps: int = 4
+    guidance_scale: float = 1.0
     result: bytes | None = None   # PNG 字节
     error: str | None = None
 
@@ -173,7 +173,7 @@ def _run_inference(
         "height": final_h,
         "num_inference_steps": num_inference_steps,
         "guidance_scale": guidance_scale,
-        "true_cfg_scale": 4.0,
+        "true_cfg_scale": 1.0,
         "negative_prompt": " ",
         "num_images_per_prompt": 1,
         "generator": generator,
@@ -194,7 +194,7 @@ async def lifespan(app: FastAPI):
     num_workers = task_manager._num_workers
     for i in range(num_workers):
         print(f"正在加载模型实例 {i + 1}/{num_workers}，请稍候...")
-        pipe = load_model_4bit()
+        pipe = load_model_lightning_lora()
         task_manager._pipes.append(pipe)
         print(f"模型实例 {i + 1}/{num_workers} 加载完成")
     print(f"全部 {num_workers} 个模型实例已就绪！")
@@ -219,10 +219,6 @@ async def health():
 async def generate(
     images: list[UploadFile] = File(..., description="输入图片（支持多张）"),
     prompt: str = Form(..., description="编辑提示词"),
-    seed: int = Form(42),
-    num_inference_steps: int = Form(20),
-    guidance_scale: float = Form(5.0),
-    max_image_size: int = Form(1024),
     key: str = Depends(verify_api_key),
 ):
     """提交推理任务，立即返回 task_id，推理在后台排队执行。"""
@@ -234,7 +230,7 @@ async def generate(
 
     # ── 并行：图片预处理（加载+缩放） ─────────────────────
     preprocess_tasks = [
-        asyncio.to_thread(_load_and_resize, fb, max_image_size)
+        asyncio.to_thread(_load_and_resize, fb, 1024)
         for fb in file_bytes_list
     ]
     processed_images = await asyncio.gather(*preprocess_tasks)
@@ -242,18 +238,19 @@ async def generate(
     # 单张图片直接传 Image，多张传 list[Image]
     input_images = processed_images[0] if len(processed_images) == 1 else processed_images
 
+    # ── 随机种子 ──────────────────────────────────────────
+    seed = secrets.randbelow(2**32)
+
     # ── 创建任务并入队 ────────────────────────────────────
     task = Task(
         id=uuid.uuid4().hex[:12],
         input_images=input_images,
         prompt=prompt,
         seed=seed,
-        num_inference_steps=num_inference_steps,
-        guidance_scale=guidance_scale,
     )
     task_manager.submit(task)
 
-    return {"task_id": task.id, "status": "waiting", "queue_position": task.queue_position}
+    return {"task_id": task.id, "status": "waiting", "queue_position": task.queue_position, "seed": seed}
 
 
 @app.get("/status/{task_id}")

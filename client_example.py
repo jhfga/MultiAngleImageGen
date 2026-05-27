@@ -24,16 +24,12 @@ def submit_task(image_path: str, prompt: str) -> str:
             files={"images": f},
             data={
                 "prompt": prompt,
-                "seed": 42,
-                "num_inference_steps": 30,
-                "guidance_scale": 5.0,
-                "max_image_size": 1024,
             },
             params={"key": API_KEY},
         )
     resp.raise_for_status()
     data = resp.json()
-    print(f"任务已提交: task_id={data['task_id']}, 排队位置={data['queue_position']}")
+    print(f"任务已提交: task_id={data['task_id']}, seed={data['seed']}, 排队位置={data['queue_position']}")
     return data["task_id"]
 
 
