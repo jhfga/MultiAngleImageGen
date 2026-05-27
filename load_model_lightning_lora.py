@@ -5,16 +5,18 @@ from PIL import Image
 from lightx2v import LightX2VPipeline
 
 
-def load_model_fp8_lightning(
+def load_model_lightning_lora(
     model_path: str = "./models/Qwen-Image-Edit-2511",
-    fp8_ckpt: str = "./models/Qwen-image-edit-2511-fp8-4steps/qwen_image_edit_2511_fp8_e4m3fn_scaled_lightning_4steps_v1.0.safetensors",
-    lora_path: str | None = "./models/Qwen-Image-Edit-2511-Multiple-Angles-LoRA/qwen-image-edit-2511-multiple-angles-lora.safetensors",
+    lightning_lora_path: str = "./models/Qwen-Image-Edit-2511-Lightning/Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors",
+    multi_angle_lora_path: str | None = "./models/Qwen-Image-Edit-2511-Multiple-Angles-LoRA/qwen-image-edit-2511-multiple-angles-lora.safetensors",
 ):
     """
+    适用于不支持 FP8 的 GPU（如 A100），使用 Lightning 蒸馏 LoRA + 多角度 LoRA。
+
     Args:
         model_path: 基础模型目录路径
-        fp8_ckpt: FP8+Lightning 合并权重文件路径
-        lora_path: 多角度 LoRA 权重路径
+        lightning_lora_path: Lightning 蒸馏 LoRA 权重路径（bf16/fp32 均可）
+        multi_angle_lora_path: 多角度 LoRA 权重路径
 
     Returns:
         LightX2VPipeline 实例
@@ -25,22 +27,17 @@ def load_model_fp8_lightning(
         task="i2i",
     )
 
-    # 加载 FP8+Lightning 合并权重
-    pipe.enable_quantize(
-        dit_quantized=True,
-        dit_quantized_ckpt=fp8_ckpt,
-        quant_scheme="fp8-sgl",
-        text_encoder_quantized=True,
-        text_encoder_quantized_ckpt="./models/Qwen25-VL-4bit-GPTQ",
-        text_encoder_quant_scheme="int4"
-    )
+    # 加载 Lightning LoRA + 多角度 LoRA（动态模式，不使用 FP8 量化）
+    lora_configs = [
+        {"path": lightning_lora_path, "strength": 1.0},
+    ]
+    if multi_angle_lora_path is not None:
+        lora_configs.append({"path": multi_angle_lora_path, "strength": 1.0})
 
-    # 加载多角度 LoRA
-    if lora_path is not None:
-        pipe.enable_lora(
-            [{"path": lora_path, "strength": 1.0}],
-            lora_dynamic_apply=True,
-        )
+    pipe.enable_lora(
+        lora_configs,
+        lora_dynamic_apply=True,
+    )
 
     # 创建生成器
     pipe.create_generator(
@@ -90,7 +87,7 @@ def benchmark_inference(
     seed: int = 42,
 ):
     """
-    使用 FP8 Lightning 模型执行图像编辑推理。
+    使用 Lightning LoRA 模型执行图像编辑推理。
 
     Args:
         pipe: 已加载的 LightX2VPipeline 实例
@@ -119,7 +116,7 @@ def benchmark_inference(
 
 
 if __name__ == "__main__":
-    pipe = load_model_fp8_lightning()
+    pipe = load_model_lightning_lora()
 
     prompts = [
         "<sks> front view eye-level shot medium shot",
