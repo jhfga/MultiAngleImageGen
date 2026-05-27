@@ -1,17 +1,23 @@
+import math
 import os
-import tempfile
 import time
+import torch
 from PIL import Image
-from lightx2v import LightX2VPipeline
+from diffusers import (
+    FlowMatchEulerDiscreteScheduler,
+    QwenImageEditPlusPipeline,
+)
+from diffusers.models import QwenImageTransformer2DModel
 
 
 def load_model_lightning_lora(
-    model_path: str = "./models/Qwen-Image-Edit-2511",
+    model_path: str = "./models/Qwen-Image-Edit-2511-4bit",
     lightning_lora_path: str = "./models/Qwen-Image-Edit-2511-Lightning/Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors",
     multi_angle_lora_path: str | None = "./models/Qwen-Image-Edit-2511-Multiple-Angles-LoRA/qwen-image-edit-2511-multiple-angles-lora.safetensors",
 ):
     """
     适用于不支持 FP8 的 GPU（如 A100），使用 Lightning 蒸馏 LoRA + 多角度 LoRA。
+    基于 diffusers 官方库加载模型和 LoRA。
 
     Args:
         model_path: 基础模型目录路径
@@ -19,99 +25,124 @@ def load_model_lightning_lora(
         multi_angle_lora_path: 多角度 LoRA 权重路径
 
     Returns:
-        LightX2VPipeline 实例
+        QwenImageEditPlusPipeline 实例
     """
-    pipe = LightX2VPipeline(
-        model_path=model_path,
-        model_cls="qwen-image-edit-2511",
-        task="i2i",
+    torch_dtype = torch.bfloat16
+
+    # Lightning LoRA 需要配合特定的 scheduler 配置
+    scheduler_config = {
+        "base_image_seq_len": 256,
+        "base_shift": math.log(3),
+        "invert_sigmas": False,
+        "max_image_seq_len": 8192,
+        "max_shift": math.log(3),
+        "num_train_timesteps": 1000,
+        "shift": 1.0,
+        "shift_terminal": None,
+        "stochastic_sampling": False,
+        "time_shift_type": "exponential",
+        "use_beta_sigmas": False,
+        "use_dynamic_shifting": True,
+        "use_exponential_sigmas": False,
+        "use_karras_sigmas": False,
+    }
+    scheduler = FlowMatchEulerDiscreteScheduler.from_config(scheduler_config)
+
+    # 先加载 transformer，再加载 LoRA
+    transformer = QwenImageTransformer2DModel.from_pretrained(
+        model_path, subfolder="transformer", torch_dtype=torch_dtype
     )
 
-    # 加载 Lightning LoRA + 多角度 LoRA（动态模式，不使用 FP8 量化）
-    lora_configs = [
-        {"path": lightning_lora_path, "strength": 1.0},
-    ]
+    pipe = QwenImageEditPlusPipeline.from_pretrained(
+        model_path,
+        transformer=transformer,
+        scheduler=scheduler,
+        torch_dtype=torch_dtype,
+    )
+    pipe.to("cuda")
+
+    # 加载 Lightning LoRA
+    pipe.load_lora_weights(lightning_lora_path, adapter_name="lightning")
+
+    # 加载多角度 LoRA（与 Lightning LoRA 同时启用）
     if multi_angle_lora_path is not None:
-        lora_configs.append({"path": multi_angle_lora_path, "strength": 1.0})
-
-    pipe.enable_lora(
-        lora_configs,
-        lora_dynamic_apply=True,
-    )
-
-    # 创建生成器
-    pipe.create_generator(
-        attn_mode="flash_attn3",
-        resize_mode="adaptive",
-        infer_steps=4,
-        guidance_scale=1,
-    )
-
-    pipe.CONDITION_IMAGE_SIZE = 1048576
+        pipe.load_lora_weights(multi_angle_lora_path, adapter_name="multi_angle")
+        pipe.set_adapters(["lightning", "multi_angle"])
 
     return pipe
 
 
 MAX_SIZE = 1024
-_temp_dir = None
 
 
-def _get_temp_dir():
-    global _temp_dir
-    if _temp_dir is None:
-        _temp_dir = tempfile.mkdtemp(prefix="resized_")
-    return _temp_dir
-
-
-def resize_image_if_needed(image_path: str, max_size: int = MAX_SIZE) -> str:
-    """当图片宽或高超限时，等比例缩放到范围内，返回缩放后的临时路径；无需缩放则返回原路径。"""
-    img = Image.open(image_path)
+def resize_image_if_needed(img: Image.Image, max_size: int = MAX_SIZE) -> Image.Image:
+    """当图片宽或高超限时，等比例缩放到范围内。"""
     w, h = img.size
     if w <= max_size and h <= max_size:
-        return image_path
+        return img
 
     ratio = min(max_size / w, max_size / h)
     new_w, new_h = int(w * ratio), int(h * ratio)
     img = img.resize((new_w, new_h), Image.LANCZOS)
-    save_path = os.path.join(_get_temp_dir(), f"resized_{os.path.basename(image_path)}")
-    img.save(save_path)
     print(f"图片缩放: {w}x{h} -> {new_w}x{new_h}")
-    return save_path
+    return img
 
 
 def benchmark_inference(
-    pipe,
+    pipe: QwenImageEditPlusPipeline,
     image_path: str | list[str],
     prompt: str,
     output_path: str,
     seed: int = 42,
+    num_inference_steps: int = 4,
+    guidance_scale: float = 1.0,
 ):
     """
     使用 Lightning LoRA 模型执行图像编辑推理。
 
     Args:
-        pipe: 已加载的 LightX2VPipeline 实例
-        image_path: 输入图片路径，支持单张或多张（逗号分隔）
+        pipe: 已加载的 QwenImageEditPlusPipeline 实例
+        image_path: 输入图片路径，支持单张或多张
         prompt: 编辑指令，如 "侧面视角，仰角15度"
         output_path: 输出图片保存路径
         seed: 随机种子
+        num_inference_steps: 推理步数（Lightning LoRA 推荐 4 步）
+        guidance_scale: 引导系数（Lightning LoRA 推荐 1.0）
     """
-    # LightX2V 支持多图用逗号分隔
+    # 加载输入图片
     if isinstance(image_path, list):
-        image_path = [resize_image_if_needed(p) for p in image_path]
-        image_path = ",".join(image_path)
+        input_images = [resize_image_if_needed(Image.open(p).convert("RGB")) for p in image_path]
     else:
-        image_path = resize_image_if_needed(image_path)
+        input_images = resize_image_if_needed(Image.open(image_path).convert("RGB"))
+
+    # 获取输出尺寸，对齐到 vae_scale_factor * 2 的倍数
+    if isinstance(input_images, list):
+        final_w, final_h = input_images[0].size
+    else:
+        final_w, final_h = input_images.size
+    required_div = pipe.vae_scale_factor * 2
+    final_w = round(final_w / required_div) * required_div
+    final_h = round(final_h / required_div) * required_div
 
     os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
 
-    pipe.generate(
-        seed=seed,
-        image_path=image_path,
-        prompt=prompt,
-        negative_prompt="",
-        save_result_path=output_path,
-    )
+    generator = torch.Generator(device="cpu").manual_seed(seed)
+
+    with torch.inference_mode():
+        result = pipe(
+            prompt=prompt,
+            image=input_images,
+            width=final_w,
+            height=final_h,
+            num_inference_steps=num_inference_steps,
+            guidance_scale=guidance_scale,
+            true_cfg_scale=1.0,
+            negative_prompt=" ",
+            generator=generator,
+        )
+
+    output_image = result.images[0]
+    output_image.save(output_path)
     print(f"图片已保存至 {output_path}")
 
 
