@@ -1,14 +1,16 @@
 """调用推理服务的示例脚本。"""
 
+import os
 import time
 import requests
 
-SERVER_URL = "https://ordinance-problems-bear-lloyd.trycloudflare.com"  # 替换为你的公网地址，如 https://xxxx.trycloudflare.com
+SERVER_URL = os.environ.get("SERVER_URL", "http://localhost:8000")  # 替换为你的服务地址
+API_KEY = os.environ.get("API_KEY", "替换为启动时生成的访问密钥")
 POLL_INTERVAL = 2  # 轮询间隔（秒）
 
 
 def check_health():
-    """健康检查。"""
+    """健康检查（无需密钥）。"""
     resp = requests.get(f"{SERVER_URL}/health")
     resp.raise_for_status()
     print(resp.json())
@@ -27,6 +29,7 @@ def submit_task(image_path: str, prompt: str) -> str:
                 "guidance_scale": 5.0,
                 "max_image_size": 1024,
             },
+            params={"key": API_KEY},
         )
     resp.raise_for_status()
     data = resp.json()
@@ -37,7 +40,7 @@ def submit_task(image_path: str, prompt: str) -> str:
 def wait_and_download(task_id: str, output_path: str = "output.png"):
     """轮询任务状态，完成后下载结果图片。"""
     while True:
-        resp = requests.get(f"{SERVER_URL}/status/{task_id}")
+        resp = requests.get(f"{SERVER_URL}/status/{task_id}", params={"key": API_KEY})
         resp.raise_for_status()
         data = resp.json()
 
@@ -58,7 +61,7 @@ def wait_and_download(task_id: str, output_path: str = "output.png"):
         time.sleep(POLL_INTERVAL)
 
     # 下载结果
-    resp = requests.get(f"{SERVER_URL}/result/{task_id}")
+    resp = requests.get(f"{SERVER_URL}/result/{task_id}", params={"key": API_KEY})
     resp.raise_for_status()
     with open(output_path, "wb") as f:
         f.write(resp.content)

@@ -79,52 +79,23 @@ python load_model.py
 pip install fastapi "uvicorn[standard]"
 ```
 
-#### 仅局域网访问
+#### 启动服务
 
 ```bash
 python server.py
 ```
 
-服务监听 `http://0.0.0.0:8000`。
-
-#### 公网访问（Cloudflare Quick Tunnel）
-
-1. 安装 cloudflared：
-
-```bash
-# Ubuntu/Debian（推荐，速度快）
-sudo mkdir -p /etc/apt/keyrings
-curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | sudo tee /etc/apt/keyrings/cloudflare-main.gpg >/dev/null
-echo "deb [signed-by=/etc/apt/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflared.list
-sudo apt update && sudo apt install cloudflared -y
-
-# Ubuntu/Debian（已是 root 用户）
-mkdir -p /etc/apt/keyrings
-curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | tee /etc/apt/keyrings/cloudflare-main.gpg >/dev/null
-echo "deb [signed-by=/etc/apt/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared $(. /etc/os-release && echo "$VERSION_CODENAME") main" | tee /etc/apt/sources.list.d/cloudflared.list
-apt update && apt install cloudflared -y
-
-# CentOS/RHEL
-sudo yum install cloudflared -y
-
-# Windows
-winget install Cloudflare.cloudflared
-```
-
-2. 启动服务并自动开通公网隧道：
-
-```bash
-python server.py --tunnel
-```
-
-启动后会自动打印公网地址，如：
+启动后会自动生成访问密钥并打印：
 
 ```
 ============================================================
-  公网访问地址: https://xxxx-xxxx.trycloudflare.com
-  API 文档:     https://xxxx-xxxx.trycloudflare.com/docs
+  服务地址:  http://0.0.0.0:8000
+  访问密钥:  aB3dEfGhJkLmNoPqRsTuVwXy
+  API 文档:  http://0.0.0.0:8000/docs?key=aB3dEfGhJkLmNoPqRsTuVwXy
 ============================================================
 ```
+
+用户只需知道**服务地址**和**访问密钥**即可访问服务，无需电脑系统密码。每次重启服务会生成新的密钥。
 
 #### 服务启动参数
 
@@ -132,11 +103,12 @@ python server.py --tunnel
 |------|--------|------|
 | `--host` | `0.0.0.0` | 监听地址 |
 | `--port` | `8000` | 监听端口 |
-| `--tunnel` | 关闭 | 启用 Cloudflare Quick Tunnel 公网访问 |
 
 #### API 接口
 
-**健康检查**
+所有接口（`/health` 除外）需通过查询参数 `key` 传递访问密钥进行认证。
+
+**健康检查**（无需密钥）
 
 ```
 GET /health
@@ -145,7 +117,7 @@ GET /health
 **图像生成**
 
 ```
-POST /generate
+POST /generate?key=<访问密钥>
 Content-Type: multipart/form-data
 ```
 
@@ -158,14 +130,24 @@ Content-Type: multipart/form-data
 | `guidance_scale` | float | 否 | 5.0 | 引导系数 |
 | `max_image_size` | int | 否 | 1024 | 最大图像边长 |
 
-返回 `image/png` 图片字节流。
+**查询任务状态**
+
+```
+GET /status/{task_id}?key=<访问密钥>
+```
+
+**获取结果图片**
+
+```
+GET /result/{task_id}?key=<访问密钥>
+```
 
 #### 调用示例
 
 **curl**
 
 ```bash
-curl -X POST http://localhost:8000/generate \
+curl -X POST "http://localhost:8000/generate?key=你的访问密钥" \
   -F "images=@test.png" \
   -F "prompt=<sks> front view eye-level shot medium shot" \
   -o output.png
@@ -175,6 +157,13 @@ curl -X POST http://localhost:8000/generate \
 
 ```bash
 pip install requests
+```
+
+设置环境变量后运行客户端示例：
+
+```bash
+set SERVER_URL=http://你的IP:8000
+set API_KEY=你的访问密钥
 python client_example.py
 ```
 

@@ -2,16 +2,14 @@ import argparse
 import asyncio
 import io
 import contextlib
-import subprocess
-import sys
-import re
+import secrets
 import uuid
 import time
 from dataclasses import dataclass, field
 
 import torch
 from PIL import Image
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, Query
 from fastapi.responses import Response
 
 from load_model import load_model_4bit
@@ -36,20 +34,23 @@ class Task:
 
 
 class TaskManager:
-    """管理推理任务队列，串行执行推理，支持查询排队位置。"""
+    """管理推理任务队列，支持多 worker 并行推理。"""
 
-    def __init__(self):
+    def __init__(self, num_workers: int = 1):
         self._tasks: dict[str, Task] = {}
         self._queue: asyncio.Queue[str] = asyncio.Queue()
-        self._worker_started = False
+        self._workers_started = False
+        self._num_workers = num_workers
+        self._pipes: list = []  # 每个 worker 的 pipe 实例
 
     def start_worker(self):
-        if not self._worker_started:
-            asyncio.create_task(self._worker())
-            self._worker_started = True
+        if not self._workers_started:
+            for i, pipe in enumerate(self._pipes):
+                asyncio.create_task(self._worker(i, pipe))
+            self._workers_started = True
 
-    async def _worker(self):
-        """后台 worker，逐个处理队列中的任务。"""
+    async def _worker(self, worker_id: int, pipe):
+        """后台 worker，从共享队列领任务，用自己的 pipe 执行推理。"""
         while True:
             task_id = await self._queue.get()
             task = self._tasks.get(task_id)
@@ -63,6 +64,7 @@ class TaskManager:
             try:
                 output_image = await asyncio.to_thread(
                     _run_inference,
+                    pipe,
                     task.input_images,
                     task.prompt,
                     task.seed,
@@ -105,8 +107,17 @@ class TaskManager:
 
 
 # ── 全局状态 ──────────────────────────────────────────────
-pipe = None
 task_manager = TaskManager()
+
+# ── 认证 ─────────────────────────────────────────────────
+API_KEY: str = ""  # 启动时自动生成
+
+
+def verify_api_key(key: str = Query(..., description="访问密钥")):
+    """验证 API Key。"""
+    if not secrets.compare_digest(key, API_KEY):
+        raise HTTPException(status_code=403, detail="无效的访问密钥")
+    return key
 
 
 # ── 图片预处理（CPU 密集，可并行） ───────────────────────
@@ -129,6 +140,7 @@ def _image_to_png_bytes(img: Image.Image) -> bytes:
 
 # ── 推理逻辑（不写磁盘，直接返回 Image） ─────────────────
 def _run_inference(
+    pipe,
     input_images,
     prompt: str,
     seed: int,
@@ -178,14 +190,17 @@ def _run_inference(
 # ── FastAPI 应用 ─────────────────────────────────────────
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
-    """启动时预热模型，关闭时清理。"""
-    global pipe
-    print("正在加载模型，请稍候...")
-    pipe = load_model_4bit()
-    print("模型加载完成，服务已就绪！")
+    """启动时加载模型实例，关闭时清理。"""
+    num_workers = task_manager._num_workers
+    for i in range(num_workers):
+        print(f"正在加载模型实例 {i + 1}/{num_workers}，请稍候...")
+        pipe = load_model_4bit()
+        task_manager._pipes.append(pipe)
+        print(f"模型实例 {i + 1}/{num_workers} 加载完成")
+    print(f"全部 {num_workers} 个模型实例已就绪！")
     task_manager.start_worker()
     yield
-    pipe = None
+    task_manager._pipes.clear()
 
 
 app = FastAPI(title="Multi-Angle Image Generation Service", lifespan=lifespan)
@@ -193,7 +208,11 @@ app = FastAPI(title="Multi-Angle Image Generation Service", lifespan=lifespan)
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "model_loaded": pipe is not None}
+    return {
+        "status": "ok",
+        "workers": len(task_manager._pipes),
+        "model_loaded": len(task_manager._pipes) > 0,
+    }
 
 
 @app.post("/generate")
@@ -204,9 +223,10 @@ async def generate(
     num_inference_steps: int = Form(20),
     guidance_scale: float = Form(5.0),
     max_image_size: int = Form(1024),
+    key: str = Depends(verify_api_key),
 ):
     """提交推理任务，立即返回 task_id，推理在后台排队执行。"""
-    if pipe is None:
+    if not task_manager._pipes:
         raise HTTPException(status_code=503, detail="模型尚未加载完成，请稍后重试")
 
     # ── 并行：读取上传文件字节（UploadFile.read 是异步方法） ──
@@ -237,7 +257,7 @@ async def generate(
 
 
 @app.get("/status/{task_id}")
-async def get_status(task_id: str):
+async def get_status(task_id: str, key: str = Depends(verify_api_key)):
     """查询任务状态和排队位置。"""
     task = task_manager.get(task_id)
     if task is None:
@@ -259,7 +279,7 @@ async def get_status(task_id: str):
 
 
 @app.get("/result/{task_id}")
-async def get_result(task_id: str):
+async def get_result(task_id: str, key: str = Depends(verify_api_key)):
     """获取已完成的推理结果图片。"""
     task = task_manager.get(task_id)
     if task is None:
@@ -272,34 +292,6 @@ async def get_result(task_id: str):
     return Response(content=task.result, media_type="image/png")
 
 
-# ── Cloudflare Quick Tunnel ──────────────────────────────
-def _start_tunnel(port: int) -> subprocess.Popen:
-    """启动 cloudflared quick tunnel，返回子进程对象。"""
-    cmd = ["cloudflared", "tunnel", "--url", f"http://localhost:{port}"]
-    proc = subprocess.Popen(
-        cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
-    )
-    # 等待输出中出现公网 URL
-    url_pattern = re.compile(r"https://[a-z0-9-]+\.trycloudflare\.com")
-    public_url = None
-    while True:
-        line = proc.stdout.readline()
-        if not line:
-            break
-        match = url_pattern.search(line)
-        if match:
-            public_url = match.group(0)
-            break
-    if public_url:
-        print(f"\n{'='*60}")
-        print(f"  公网访问地址: {public_url}")
-        print(f"  API 文档:     {public_url}/docs")
-        print(f"{'='*60}\n")
-    else:
-        print("警告: 未能获取 cloudflared 公网地址，请确认 cloudflared 已安装")
-    return proc
-
-
 # ── 启动入口 ─────────────────────────────────────────────
 if __name__ == "__main__":
     import uvicorn
@@ -307,15 +299,20 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Multi-Angle Image Generation Service")
     parser.add_argument("--host", default="0.0.0.0", help="监听地址 (默认: 0.0.0.0)")
     parser.add_argument("--port", type=int, default=8000, help="监听端口 (默认: 8000)")
-    parser.add_argument("--tunnel", action="store_true", help="启动 Cloudflare Quick Tunnel，使服务公网可访问")
+    parser.add_argument("--workers", type=int, default=1, help="模型实例数量 (默认: 1)")
     args = parser.parse_args()
 
-    tunnel_proc = None
-    if args.tunnel:
-        tunnel_proc = _start_tunnel(args.port)
+    # 设置 worker 数量
+    task_manager._num_workers = args.workers
 
-    try:
-        uvicorn.run(app, host=args.host, port=args.port)
-    finally:
-        if tunnel_proc:
-            tunnel_proc.terminate()
+    # 自动生成 API Key
+    API_KEY = secrets.token_urlsafe(24)
+
+    print(f"\n{'='*60}")
+    print(f"  服务地址:  http://{args.host}:{args.port}")
+    print(f"  模型实例:  {args.workers}")
+    print(f"  访问密钥:  {API_KEY}")
+    print(f"  API 文档:  http://{args.host}:{args.port}/docs?key={API_KEY}")
+    print(f"{'='*60}\n")
+
+    uvicorn.run(app, host=args.host, port=args.port)
