@@ -53,6 +53,8 @@ modelscope download --model 1038lab/Qwen-Image-Edit-2511-FP8 --local_dir ./model
 
 ### 主模型（FP8 量化 + Lightning 4步加速版）
 
+Lightning 加速通过 LoRA 实现，需要先下载 FP8 基础模型（见上方），再下载 Lightning LoRA：
+
 ```bash
 # 安装 huggingface_hub（如未安装）
 pip install huggingface_hub
@@ -63,9 +65,11 @@ export HF_ENDPOINT=https://hf-mirror.com
 # Windows:
 set HF_ENDPOINT=https://hf-mirror.com
 
-# 下载模型
-hf download lightx2v/Qwen-Image-Edit-2511-Lightning qwen_image_edit_2511_fp8_e4m3fn_scaled_lightning_4steps_v1.0.safetensors --local-dir ./models/Qwen-image-edit-2511-fp8-4steps
+# 下载 Lightning LoRA（4步加速）
+hf download lightx2v/Qwen-Image-Edit-2511-Lightning --local-dir ./models/Qwen-Image-Edit-2511-Lightning
 ```
+
+> **注意**：`lightx2v/Qwen-Image-Edit-2511-Lightning` 仓库中的 scaled FP8 单文件（`qwen_image_edit_2511_fp8_e4m3fn_scaled_lightning_4steps_v1.0.safetensors`）仅适用于 LightX2V 和 ComfyUI，不能在 diffusers 中使用。在 diffusers 中应使用 Lightning LoRA 方式加载。
 
 ### LoRA
 
