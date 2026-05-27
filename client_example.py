@@ -4,7 +4,7 @@ import os
 import time
 import requests
 
-SERVER_URL = os.environ.get("SERVER_URL", "http://localhost:8000")  # 替换为你的服务地址
+SERVER_URL = os.environ.get("SERVER_URL", "http://localhost:8001")  # 替换为你的服务地址
 API_KEY = os.environ.get("API_KEY", "替换为启动时生成的访问密钥")
 POLL_INTERVAL = 2  # 轮询间隔（秒）
 

@@ -295,7 +295,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Multi-Angle Image Generation Service")
     parser.add_argument("--host", default="0.0.0.0", help="监听地址 (默认: 0.0.0.0)")
-    parser.add_argument("--port", type=int, default=8000, help="监听端口 (默认: 8000)")
+    parser.add_argument("--port", type=int, default=8001, help="监听端口 (默认: 8001)")
     parser.add_argument("--workers", type=int, default=1, help="模型实例数量 (默认: 1)")
     args = parser.parse_args()
 
