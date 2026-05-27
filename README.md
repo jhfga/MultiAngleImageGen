@@ -89,13 +89,52 @@ python server.py
 
 ```
 ============================================================
-  服务地址:  http://0.0.0.0:8000
+  服务已启动，监听端口: 8000
+  模型实例:  1
   访问密钥:  aB3dEfGhJkLmNoPqRsTuVwXy
-  API 文档:  http://0.0.0.0:8000/docs?key=aB3dEfGhJkLmNoPqRsTuVwXy
+
+  本机访问:
+    http://127.0.0.1:8000/docs?key=aB3dEfGhJkLmNoPqRsTuVwXy
+
+  远程访问（通过 SSH 端口转发）:
+    1. 在本地终端运行:
+       ssh -p <SSH端口> -L 8000:127.0.0.1:8000 root@<服务器地址>
+    2. 然后在本地浏览器访问:
+       http://127.0.0.1:8000/docs?key=aB3dEfGhJkLmNoPqRsTuVwXy
 ============================================================
 ```
 
-用户只需知道**服务地址**和**访问密钥**即可访问服务，无需电脑系统密码。每次重启服务会生成新的密钥。
+#### 远程访问服务
+
+由于服务器通常无法直接通过 IP 访问，需要通过 **SSH 端口转发** 将远程服务映射到本地。
+
+**步骤：**
+
+1. 在远程服务器上启动服务（建议用 `nohup` 后台运行）：
+
+```bash
+nohup python server.py &
+```
+
+2. 在本地电脑终端建立 SSH 隧道：
+
+```bash
+ssh -p <SSH端口> -L 8000:127.0.0.1:8000 root@<服务器地址>
+```
+
+例如，SSH 连接方式为 `ssh -p 43965 root@cmsn7b0ulygezvd4snow.deepln.com`，则运行：
+
+```bash
+ssh -p 43965 -L 8000:127.0.0.1:8000 root@cmsn7b0ulygezvd4snow.deepln.com
+```
+
+3. 保持 SSH 连接不中断，在本地浏览器访问：
+
+```
+http://127.0.0.1:8000/docs?key=<访问密钥>
+```
+
+> **原理**：`-L 8000:127.0.0.1:8000` 表示将本地 8000 端口转发到远程机器的 127.0.0.1:8000，所有对本地 8000 端口的请求都会通过 SSH 隧道安全地传递到远程服务。
 
 #### 服务启动参数
 
@@ -103,6 +142,27 @@ python server.py
 |------|--------|------|
 | `--host` | `0.0.0.0` | 监听地址 |
 | `--port` | `8000` | 监听端口 |
+| `--workers` | `1` | 模型实例数量，增加可提高并发处理能力 |
+
+#### 启动示例
+
+**单模型实例**（默认，适合单 GPU）
+
+```bash
+python server.py
+```
+
+**多模型实例**（多 GPU 或大显存，提高并发吞吐）
+
+```bash
+# 2 个模型实例，并行处理 2 个任务
+python server.py --workers 2
+
+# 4 个模型实例
+python server.py --workers 4
+```
+
+> 注意：每个模型实例会占用一份显存，请根据 GPU 显存大小合理设置 `--workers`。
 
 #### API 接口
 
@@ -147,7 +207,7 @@ GET /result/{task_id}?key=<访问密钥>
 **curl**
 
 ```bash
-curl -X POST "http://localhost:8000/generate?key=你的访问密钥" \
+curl -X POST "http://127.0.0.1:8000/generate?key=你的访问密钥" \
   -F "images=@test.png" \
   -F "prompt=<sks> front view eye-level shot medium shot" \
   -o output.png
@@ -162,7 +222,7 @@ pip install requests
 设置环境变量后运行客户端示例：
 
 ```bash
-set SERVER_URL=http://你的IP:8000
+set SERVER_URL=http://127.0.0.1:8000
 set API_KEY=你的访问密钥
 python client_example.py
 ```

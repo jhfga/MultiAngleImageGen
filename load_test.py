@@ -4,7 +4,7 @@
 每个用户提交任务后一直排队等待直到完成，无最大等待时间。
 
 用法:
-    python load_test.py --url http://203.0.113.10:8000 --key <访问密钥> --traffic 6
+    python load_test.py --url http://127.0.0.1:8000 --key <访问密钥> --traffic 10
 
     traffic 表示每分钟平均到达的用户数，越大流量越高。
 """
