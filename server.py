@@ -308,11 +308,25 @@ if __name__ == "__main__":
     # 自动生成 API Key
     API_KEY = secrets.token_urlsafe(24)
 
+    # 获取本机实际 IP 地址
+    import socket
+    local_ips = []
+    try:
+        hostname = socket.gethostname()
+        for info in socket.getaddrinfo(hostname, None):
+            ip = info[4][0]
+            if ip not in local_ips and not ip.startswith("127.") and ":" not in ip:
+                local_ips.append(ip)
+    except Exception:
+        pass
+
     print(f"\n{'='*60}")
-    print(f"  服务地址:  http://{args.host}:{args.port}")
+    print(f"  本机访问:  http://127.0.0.1:{args.port}")
+    for ip in local_ips:
+        print(f"  网络访问:  http://{ip}:{args.port}")
     print(f"  模型实例:  {args.workers}")
     print(f"  访问密钥:  {API_KEY}")
-    print(f"  API 文档:  http://{args.host}:{args.port}/docs?key={API_KEY}")
+    print(f"  API 文档:  http://127.0.0.1:{args.port}/docs?key={API_KEY}")
     print(f"{'='*60}\n")
 
     uvicorn.run(app, host=args.host, port=args.port)

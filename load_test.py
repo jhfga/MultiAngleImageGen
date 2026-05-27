@@ -4,7 +4,7 @@
 每个用户提交任务后一直排队等待直到完成，无最大等待时间。
 
 用法:
-    python load_test.py --key <访问密钥> --traffic 6
+    python load_test.py --url http://203.0.113.10:8000 --key <访问密钥> --traffic 6
 
     traffic 表示每分钟平均到达的用户数，越大流量越高。
 """
@@ -279,7 +279,7 @@ async def run_load_test(
 
 def main():
     parser = argparse.ArgumentParser(description="多用户随机到达负载测试")
-    parser.add_argument("--url", default="http://localhost:8000", help="服务地址")
+    parser.add_argument("--url", required=True, help="服务地址，如 http://203.0.113.10:8000")
     parser.add_argument("--key", required=True, help="访问密钥")
     parser.add_argument("--duration", type=int, default=600, help="测试时长（秒），默认 600（10 分钟）")
     parser.add_argument("--traffic", type=float, default=6.0, help="流量：每分钟平均到达用户数，默认 6")
