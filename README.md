@@ -51,6 +51,22 @@ atomgit download hf_mirrors/toandev/Qwen-Image-Edit-2511-4bit -d ./models/Qwen-I
 modelscope download --model 1038lab/Qwen-Image-Edit-2511-FP8 --local_dir ./models/Qwen-Image-Edit-2511-FP8
 ```
 
+### 主模型（FP8 量化 + Lightning 4步加速版）
+
+```bash
+# 安装 huggingface_hub（如未安装）
+pip install huggingface_hub
+
+# 设置 HuggingFace 国内镜像
+# Linux:
+export HF_ENDPOINT=https://hf-mirror.com
+# Windows:
+set HF_ENDPOINT=https://hf-mirror.com
+
+# 下载模型
+hf download lightx2v/Qwen-Image-Edit-2511-Lightning qwen_image_edit_2511_fp8_e4m3fn_scaled_lightning_4steps_v1.0.safetensors --local-dir ./models/Qwen-image-edit-2511-fp8-4steps
+```
+
 ### LoRA
 
 ```bash
